@@ -1,0 +1,148 @@
+---
+title: "Comfort Levels"
+author: "Carlos Paradis"
+date: "June 2, 2017"
+output:
+  html_document:
+    css: ~/OneDrive/Academia/Projects/inkCSS/res/css/style.css
+    highlight: zenburn  
+    toc: yes
+    toc_depth: 5
+  word_document: default
+---
+
+# Introduction 
+
+This R Notebook utilizes the javascript functions from the [CBE Comfort Tool](http://comfort.cbe.berkeley.edu/), freely available on the website's [Github](https://github.com/CenterForTheBuiltEnvironment/comfort_tool/tree/master/static/js) in order to estimate the thermal comfort of the students of KWest, KWEast and Illima projects. 
+
+
+
+The data used here is associated to the ERDL **frog3** database, which for the purposes of analysis exists in the **sensor_info2** and **all_sensor_data** tables. 
+
+```{r,warning=FALSE,message=FALSE}
+s <- suppressPackageStartupMessages
+library(data.table)
+library(lubridate)
+library(knitr)
+sensors <- fread("data/sensor_info2.csv")
+readings <- fread("data/all_sensor_data.csv",showProgress=FALSE)
+
+```
+
+The sensor_info2 table contains various information associated to the reading: 
+
+```{r Sensor Metadata Information,warning=FALSE,message=FALSE}
+kable(sensors)
+```
+
+While **all_sensor_data** contain the readings, as shown on the following sample:
+
+```{r Sensor Information Sample,warning=FALSE,message=FALSE}
+readings <- readings[,.(date=ymd_hms(datetime),sensor_id,reading)]
+kable(head(readings))
+```
+
+# Pre-Processing
+
+To calculate the thermal comfort, we first separate the readings associated to each building. 
+
+```{r Merge Samples to Sensors and Extract Buildings,warning=FALSE,message=FALSE}
+dt <- merge(sensors,readings,by="sensor_id")
+west <- dt[building=="KWWest"]
+east <- dt[building=="KWEast"]
+illima <- dt[building=="Illima"]
+```
+
+Next, we format each building table readings, so that each sensor is in a specific column. Among the required sensor readings for the thermal comfort model, **we currently only have absolute temperature and relative humidity**, and rows which have missing either temperature or relative humidity **are filtered** as the thermal comfort model does not handle incomplete observations:
+
+```{r Unmelt the Building tables by their timestamp,warning=FALSE,message=FALSE}
+LongFormatReadings <- function(building){
+  building <- dcast(building,date ~ sensor_id,value.var=c("reading"))
+  building <- building[,c("date","4","3"),with=FALSE]
+  building <- building[complete.cases(building)]
+  colnames(building) <- c("date","temp","relh")  
+  return(building)
+}
+west <- LongFormatReadings(west)
+#east <- LongFormatReadings(east)
+#illima <- LongFormatReadings(illima)
+```
+
+For the remaining required variables, we made the following assumptions given the setting of the 3 buildings were a classroom:
+
+ * Radiant Temperature: Same as absolute temperature.
+ * Air Velocity: 0.1 m/s (No ventilation)
+ * Metabolic Rate: 1.1 (Small level of activity, as students are sitting watching the class)
+ * Cloth Level: 0.5 (Students are in Hawaii, and there is no A/C so the amount of clothes worn are few)
+ * WME: 0 
+
+```{r,warning=FALSE,message=FALSE}
+
+AddOtherVariableAssumptions <- function(building){
+  building$radtemp <- building$temp
+  building$vel <- 0.1
+  building$met <- 1.1
+  building$clo <- 0.5
+  building$wme <- 0
+  return(building)
+}
+
+west <- AddOtherVariableAssumptions(west)
+
+```
+
+As shown below (sample):
+
+```{r,warning=FALSE,message=FALSE}
+kable(head(west))
+```
+
+
+# Thermal Comfort Analysis
+
+We use the functions from CBE Comfort Tool website on the pre-processed data to obtain the thermal comfort. The R Library (V8) is used to execute javascript, and return a dataframe object. This Notebook uses 2 functions:
+
+ * PMV Elevated Air
+ * PMV
+ 
+The PMV Elevated Air function is a superset of the PMV function. When airspeed is beyond 0.15 m/s, then the original PMV model can no longer be used. In these cases, the PMV Elevated Air function performs some pre-processing before calling the PMV model. The intuition behind it is that the SET index is used on the data with elevated air speed, and adjust the sensor readings through temperature and relative humidity to reflect the **same thermal comfort situation** on a lower air speed, thus comforming to the original PMV model [1]. 
+
+The Elevated Air speed superset function was proposed by the CBE Comfort Tool group, 
+
+```{r Javascript Version,warning=FALSE,message=FALSE}
+#Load Google's Javscript Engine V8 (See https://cran.r-project.org/web/packages/V8/vignettes/v8_intro.html) 
+library(V8)
+#Create a new context
+ct <- v8()
+
+#Load Javascript Library for forEach function
+ct$source(system.file("js/underscore.js", package="V8"))
+#Load local comfortModel javscript library (only modified the path of the libraries)
+ct$source("comfortmodels.js")
+ct$source("util.js")
+ct$source("psychrometrics.js")
+
+#Apply the function over all the table for pmvElevatedAirspeed
+west.elevated.air.pmv <- data.table(ct$call("_.map", west, JS("function(x){return(comf.pmvElevatedAirspeed(util.FtoC(x.temp),util.FtoC(x.radtemp),x.vel/196.85,x.relh,x.clo,x.met,x.wme))}")))
+
+west.pmv<- data.table(ct$call("_.map", west, JS("function(x){return(comf.pmv(util.FtoC(x.temp),util.FtoC(x.radtemp),x.vel/196.85,x.relh,x.clo,x.met,x.wme))}")))
+```
+
+# Comfort Thresholds
+
+The CBE Comfort Tool functions only returns the PMV scores. Depending on the Standard adopted, the threshold of the PMV score varies in indicating wether the group of people of the readings, subject to the PPD value is comfortable or not on the thermal conditions. For ASHRAE55, this threshold occurs on -0.5 and +0.5 (Refer to the standard for a finer granularity comfort label such as Hot, Cold, Very Hot, Very Cold, etc.)
+
+```{r,warning=FALSE,message=FALSE}
+west.elevated.air.pmv$iscomfortable <- ifelse(west.elevated.air.pmv$pmv > -0.5 & west.elevated.air.pmv$pmv < 0.5,"comfortable","uncomfortable")
+kable(west.elevated.air.pmv[,.(frequency=length(pmv)),by="iscomfortable"])
+```
+
+```{r,warning=FALSE,message=FALSE}
+library(dygraphs)
+west.elevated.air.pmv$date <- west$date
+dygraph(west.elevated.air.pmv[,.(date,pmv)], main = "Comfort Level") %>% dyRangeSelector()
+```
+
+# References
+
+[1] Web application for thermal comfort visualization and calculation according to ASHRAE Standard 55. 
