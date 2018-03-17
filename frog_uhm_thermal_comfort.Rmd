@@ -1,0 +1,166 @@
+---
+title: "Thermal Comfort on Sample Frogs Data"
+author: "Carlos V. Paradis"
+date: "March 16, 2018"
+output: 
+  html_document:
+    number_sections: true
+    toc: true
+    fig_width: 7
+    fig_height: 4.5
+    theme: cosmo
+    highlight: tango
+    code_folding: hide
+---
+
+```{r,warning=FALSE,message=FALSE}
+s <- suppressPackageStartupMessages
+library(data.table)
+library(lubridate)
+library(knitr)
+library(dygraphs)
+```
+
+
+# Introduction
+
+This R Notebook utilizes the javascript functions from the [CBE Comfort Tool](http://comfort.cbe.berkeley.edu/), freely available on the website's [Github](https://github.com/CenterForTheBuiltEnvironment/comfort_tool/tree/master/static/js) in order to estimate the thermal comfort of the students of FROG UHM.
+
+# Readings
+
+The readings are a sample data from the frog-uhm project provided by Eileen Peppard to test the tool.
+
+```{r}
+readings <- fread("~/Desktop/aug-24-comfort-sample.csv")
+```
+
+## Used Variables
+
+Of the provided data, the following variables were used:
+
+ * Air Temperature
+ * Mean Radiant Temperature
+ * Relative Air Velocity 
+ * Relative Humidity 
+ 
+In addition, the following artificially created variables were used:
+
+ * Metabolic Rate = 1.1
+ * Clothing Level = 0.5
+ * External Work = 0 (According to the CBE Comfort Tool Documentation)
+
+```{r}
+AddOtherVariableAssumptions <- function(building){
+  building$met <- 1.1
+  building$clo <- 0.5
+  building$wme <- 0
+  return(building)
+}
+readings <- readings[,.(building,datetime,ta=temperature_air_f,tr=temperature_mrt_f,vel=air_flow_fpm,rh=humidity_percent)]
+
+readings <- AddOtherVariableAssumptions(readings)
+```
+
+# Conversions
+
+For the CBE Comfort Tool, the following units must be respected for the variables:
+
+ * Air Temperature, Mean Radiant Temperature = C
+ * Relative Air Velocity = m/s
+ * Relative Humidity = %
+ 
+And were converted from the sample data to meet the expected units.
+
+```{r}
+#Convert F to C
+readings$ta <- (readings$ta - 32)*(5/9)
+readings$tr <- (readings$tr - 32)*(5/9)
+
+# Convert fpm to m/s
+readings$vel <- 0.00508 * readings$vel
+```
+
+# Split Frog Buildings
+
+We calculate the PMV for the frog buildings separately over time. 
+
+```{r}
+frogs1 <- readings[building=='frog-1',.(ta,tr,vel,rh,met,clo,wme)]
+frogs2 <- readings[building=='frog-2',.(ta,tr,vel,rh,met,clo,wme)]
+```
+
+
+# Elevated Air Speed PMV Model
+
+This notebook uses the javascript function from the CBE Comfort Tool by passing the sample data after preparation as input, and then retrieving the output of the function which contains the PMV and PPD. 
+
+```{r Javascript Version,warning=FALSE,message=FALSE, include=FALSE, cache=FALSE}
+#Load Google's Javscript Engine V8 (See https://cran.r-project.org/web/packages/V8/vignettes/v8_intro.html)
+library(V8)
+#Create a new context
+ct <- v8()
+
+#Load Javascript Library for forEach function
+ct$source(system.file("js/underscore.js", package="V8"))
+#Load local comfortModel javscript library (only modified the path of the libraries)
+ct$source("comfortmodels.js")
+ct$source("util.js")
+ct$source("psychrometrics.js")
+
+#Apply the function over all the table for pmvElevatedAirspeed
+    # returns [pmv, ppd]
+    # ta, air temperature (C)
+    # tr, mean radiant temperature (C)
+    # vel, relative air velocity (m/s)
+    # rh, relative humidity (%) Used only this way to input humidity level
+    # met, metabolic rate (met)
+    # clo, clothing (clo)
+    # wme, external work, normally around 0 (met)
+frogs1_elevated_air_pmv <- data.table(ct$call("_.map", frogs1, JS("function(x){return(comf.pmvElevatedAirspeed(x.ta,x.tr,x.vel,x.rh,x.clo,x.met,x.wme))}")))
+
+frogs2_elevated_air_pmv <- data.table(ct$call("_.map", frogs2, JS("function(x){return(comf.pmvElevatedAirspeed(x.ta,x.tr,x.vel,x.rh,x.clo,x.met,x.wme))}")))
+```
+
+# Merge Results with Timestamps and Readings
+
+After the model results is output, the data is combined with the original readings for comparison.
+
+```{r}
+frogs1_elevated_air_pmv <- cbind(readings[building=='frog-1'],frogs1_elevated_air_pmv)
+frogs2_elevated_air_pmv <- cbind(readings[building=='frog-2'],frogs2_elevated_air_pmv)
+```
+
+# PMV Results
+
+In addition to PMV and PPD, the following columns are also output in the table (not shown below):
+
+ * SET
+ * TA_adj
+ * TR_adj
+ * cooling_effect
+ 
+ The first 3 columns relate to the `Elevated Airspeed` adjustmenet to the PMV model, which can't handle high air speeds in the original proposal by Fanger. 
+
+## Frogs 1
+
+First few rows of the table for Frogs 1. 
+
+```{r}
+kable(head(frogs1_elevated_air_pmv))
+```
+
+```{r}
+dygraph(frogs1_elevated_air_pmv[,.(mdy_hms(datetime),pmv)], main = "Frogs 1 PMV Value") %>% dyRangeSelector()
+```
+
+## Frogs 2
+
+First few rows of the table for Frogs 2. 
+
+```{r}
+kable(head(frogs2_elevated_air_pmv))
+```
+
+```{r}
+dygraph(frogs2_elevated_air_pmv[,.(mdy_hms(datetime),pmv)], main = "Frogs 2 PMV Value") %>% dyRangeSelector()
+```

@@ -1,3 +1,3 @@
 You can find a readable version of the Notebook in the following link:
 
-http://rpubs.com/carlosandrade/pmve
+http://rpubs.com/carlosandrade/frogs_pmv
