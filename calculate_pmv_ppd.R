@@ -1,5 +1,8 @@
 # See frog_uhm_thermal_comfort.Rmd for how this code works.
 
+sink("/dev/null")    # now suppresses print messages from package functions
+
+
 args = commandArgs(trailingOnly=TRUE)
 
 s <- suppressPackageStartupMessages
@@ -53,9 +56,11 @@ ct$source("psychrometrics.js")
 # met, metabolic rate (met)
 # clo, clothing (clo)
 # wme, external work, normally around 0 (met)
-pmv_elevated_air <- data.table(ct$call("_.map", readings_si, JS("function(x){return(comf.pmvElevatedAirspeed(x.ta,x.tr,x.vel,x.rh,x.clo,x.met,x.wme))}")))
+pmv_elevated_air <- data.table(invisible(ct$call("_.map", readings_si, JS("function(x){return(comf.pmvElevatedAirspeed(x.ta,x.tr,x.vel,x.rh,x.clo,x.met,x.wme))}"))))
 
 pmv_elevated_air <- cbind(readings,pmv_elevated_air)
 
 
 fwrite(pmv_elevated_air,args[2])
+
+sink() #end supression of print message
