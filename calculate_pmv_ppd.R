@@ -1,6 +1,6 @@
 # See frog_uhm_thermal_comfort.Rmd for how this code works.
 
-sink("/dev/null")    # now suppresses print messages from package functions
+#sink("/dev/null")    # now suppresses print messages from package functions
 
 
 args = commandArgs(trailingOnly=TRUE)
@@ -8,7 +8,7 @@ args = commandArgs(trailingOnly=TRUE)
 s <- suppressPackageStartupMessages
 list.of.packages <- c("data.table", "lubridate","knitr","dygraphs")
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
-if(length(new.packages)) install.packages(new.packages)
+if(length(new.packages)) install.packages(new.packages, repos = "http://cran.us.r-project.org")
 s(library(data.table))
 s(library(lubridate))
 s(library(knitr))
@@ -63,4 +63,4 @@ pmv_elevated_air <- cbind(readings,pmv_elevated_air)
 
 fwrite(pmv_elevated_air,args[2])
 
-sink() #end supression of print message
+#sink() #end supression of print message
