@@ -17,4 +17,3 @@ The adaptive method is based purely of ASHRAE55, and does not use CBE Comfort To
 
 The R code is currently only available as a notebook on `adaptive_method.Rmd`.  You can find a readable version also on [Rpubs](http://rpubs.com/carlosandrade/adaptive_method).
 
-http://rpubs.com/carlosandrade/frogs_pmv
