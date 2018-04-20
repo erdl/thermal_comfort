@@ -1,0 +1,140 @@
+---
+title: "Adaptive Method"
+author: "Carlos V. Paradis"
+date: "April 19, 2018"
+output: 
+  html_document:
+    number_sections: true
+    toc: true
+    fig_width: 7
+    fig_height: 4.5
+    theme: cosmo
+    highlight: tango
+    code_folding: hide
+---
+
+
+```{r messages = FALSE, warning = FALSE}
+s <- suppressPackageStartupMessages
+s(library(zoo))
+s(library(data.table))
+s(library(lubridate))
+s(library(knitr))
+```
+
+# Introduction
+
+This notebook uses the outdoor temperature, indoor temperature and indoor airspeed to calculate:
+
+ * Outdoor Rolling Average over last 14 days
+ * Upper and Lower Bound of Comfort Level 
+ * Number of Indoor Temperature Degrees Off the Upper or Lower Comfort Bound 
+
+```{r}
+# Parameters
+n_hours_in_every_step <- 366 #Rolling mean will be based of the previous 14 days measurements
+```
+
+# Method
+
+## Perform Average by Hour
+
+The first step to the code is to construct the outdoor rolling mean. In order to do that, first the outdoor hourly measurement is averaged in hours.
+
+```{r}
+# Load and rename columns for consistency -- no space and no upper case column names
+dt <- fread("~/Downloads/final_outdoor_min.csv")
+colnames(dt) <- c("timestamp","outdoor_temperature_f")
+
+# Identify the right types for each column
+dt$timestamp <- dmy_hms(dt$timestamp)
+dt$outdoor_temperature_f <- as.numeric(dt$outdoor_temperature_f)
+dt$ymd_h <- dt$timestamp
+
+#Ensure timestamps are ordered. Database does not guarantee that.
+dt <- dt[order(timestamp)]
+
+# Reset the minute and second to 0, so we can group by ymd_h. 
+minute(dt$ymd_h) <- 0
+second(dt$ymd_h) <- 0
+dt <- dt[,.(outdoor_temperature=mean(outdoor_temperature_f)),by="ymd_h"]
+kable(head(dt))
+```
+
+
+## Perform 14 Days Hourly Rolling Average
+
+Next, the hourly temperature is used to calculate the 14 days temperature backwards. 
+
+```{r}
+# Invert table so slide window goes backwards
+inverted_dt <- dt[order(-ymd_h)]
+
+# Calculate rolling mean and reverts back the output from the rolling mean. 
+rolling_temperature_f_mean <- rev(rollapply(inverted_dt$outdoor_temperature,
+                                            width=n_hours_in_every_step,
+                                            FUN=mean))
+```
+
+## Simulation Data 
+
+To calculate the boundaries and acceptance, besides the outdoor rolling average, we also need the indoor temperature, and air speed. Because the tables are different, i.e. indoor's temperature and airspeed are hourly, wherewas the outdoor was originally at a minute sampling rate, there is a chance after the rolling average is calculated the number of rows will not match between both tables. This script matches the minimum number of rows between them both.
+
+```{r}
+# load simulation data
+simulation_data <- fread("~/Downloads/final_riley_table.csv")[,.(in_air_temperature_f,in_air_speed_fpm)]
+
+# Add Rolling Mean Vector to Simulation Data Column-Wise. Notice this is NOT an inner join.
+min_rows <- min(length(rolling_temperature_f_mean),nrow(simulation_data))
+
+dt <- simulation_data[1:min_rows]
+dt$rolling_temperature_f_mean <- rolling_temperature_f_mean[1:min_rows]
+```
+
+## Calculate boundaries
+
+The comfort level boundaries are calculated using the outdoor rolling average adjusted by the indoor airspeed. 
+
+```{r}
+calculate_air_speed_adjustment <- function(in_air_speed){
+  return(0.0153*in_air_speed+0.4333)
+}
+
+bound <- 0.31*dt$rolling_temperature_f + calculate_air_speed_adjustment(dt$in_air_speed_fpm)
+dt$upper_bound <- bound + 60.5
+dt$lower_bound <- bound + 47.9
+```
+
+## Calculate Acceptance
+
+With the comfort upper and lower bound, we then compare the indoor temperature against them.
+
+```{r}
+dt$is_acceptable <- NA_character_
+dt[in_air_temperature_f > upper_bound]$is_acceptable <- "Unacceptable Hot"
+dt[in_air_temperature_f < lower_bound]$is_acceptable <- "Unacceptable Cold"
+dt[in_air_temperature_f > lower_bound & in_air_temperature_f < upper_bound]$is_acceptable <- "Acceptable"
+```
+
+## Calculate Degrees Off
+
+In addition, how far higher or lower than the upper and lower bound respectively can also be calculated.
+
+```{r}
+dt$degrees_off <- NA_real_
+
+dt[in_air_temperature_f > upper_bound]$degrees_off <- dt[in_air_temperature_f > upper_bound]$in_air_temperature_f - dt[in_air_temperature_f > upper_bound]$upper_bound
+
+dt[in_air_temperature_f < lower_bound]$degrees_off <- dt[in_air_temperature_f < lower_bound]$in_air_temperature_f - dt[in_air_temperature_f < lower_bound]$lower_bound
+
+dt[in_air_temperature_f > lower_bound & in_air_temperature_f < upper_bound]$degrees_off <- 0
+```
+
+# Output Table
+
+Finally, we the output table containing all the calculated information.
+
+```{r}
+kable(head(dt))
+```
+
