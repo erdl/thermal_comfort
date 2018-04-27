@@ -24,7 +24,7 @@ if (length(args)!=2) {
 
 readings <- fread(args[1])
 
-colnames(readings) <- c("ta","tr","vel","rh","met","clo") 
+colnames(readings) <- c("ta","tr","vel","rh","met","clo")
 readings$wme <- 0
 
 readings_si <- readings
@@ -56,7 +56,7 @@ ct$source("psychrometrics.js")
 # met, metabolic rate (met)
 # clo, clothing (clo)
 # wme, external work, normally around 0 (met)
-pmv_elevated_air <- data.table(invisible(ct$call("_.map", readings_si, JS("function(x){return(comf.pmvElevatedAirspeed(x.ta,x.tr,x.vel,x.rh,x.clo,x.met,x.wme))}"))))
+pmv_elevated_air <- data.table(invisible(ct$call("_.map", readings_si, JS("function(x){return(comf.pmvElevatedAirspeed(x.ta,x.tr,x.vel,x.rh,x.met,x.clo,x.wme))}"))))
 
 pmv_elevated_air <- cbind(readings,pmv_elevated_air)
 
