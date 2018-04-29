@@ -102,7 +102,7 @@ calculate_air_speed_adjustment <- function(in_air_speed){
 
 bound <- 0.31*dt$rolling_temperature_f + calculate_air_speed_adjustment(dt$in_air_speed_fpm)
 dt$upper_bound <- bound + 60.5
-dt$lower_bound <- bound + 47.9
+dt$lower_bound <- bound + 47.9 - calculate_air_speed_adjustment(dt$in_air_speed_fpm) # Adjustment was agreed to not be performed on lower bound.
 ```
 
 ## Calculate Acceptance
