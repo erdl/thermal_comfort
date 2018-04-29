@@ -1,5 +1,5 @@
 ---
-title: "Thermal Comfort on DHHL House 8"
+title: "PMV PPD"
 author: "Carlos V. Paradis"
 date: "March 22, 2018"
 output: 
@@ -105,7 +105,7 @@ ct$source("psychrometrics.js")
     # met, metabolic rate (met)
     # clo, clothing (clo)
     # wme, external work, normally around 0 (met)
-pmv_elevated_air <- data.table(ct$call("_.map", readings_si, JS("function(x){return(comf.pmvElevatedAirspeed(x.ta,x.tr,x.vel,x.rh,x.clo,x.met,x.wme))}")))
+pmv_elevated_air <- data.table(ct$call("_.map", readings_si, JS("function(x){return(comf.pmvElevatedAirspeed(x.ta,x.tr,x.vel,x.rh,x.met,x.clo,x.wme))}")))
 sink()
 ```
 
@@ -133,6 +133,9 @@ In addition to PMV and PPD, the following columns are also output in the table (
 First few rows of the table for Frogs 1. 
 
 ```{r}
+# Convert ta to tr 
+pmv_elevated_air$ta_adj <- pmv_elevated_air$ta_adj*1.8 + 32
+pmv_elevated_air$tr_adj <- pmv_elevated_air$tr_adj*1.8 + 32
 kable(head(pmv_elevated_air))
 ```
 

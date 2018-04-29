@@ -61,6 +61,10 @@ pmv_elevated_air <- data.table(invisible(ct$call("_.map", readings_si, JS("funct
 pmv_elevated_air <- cbind(readings,pmv_elevated_air)
 
 
+# Convert ta to tr 
+pmv_elevated_air$ta_adj <- pmv_elevated_air$ta_adj*1.8 + 32
+pmv_elevated_air$tr_adj <- pmv_elevated_air$tr_adj*1.8 + 32
+
 fwrite(pmv_elevated_air,args[2])
 
 #sink() #end supression of print message
