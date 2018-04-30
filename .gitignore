@@ -1,3 +1,4 @@
 data/
 rsconnect/
 .DS_Store
+*.html

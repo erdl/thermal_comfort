@@ -9,7 +9,7 @@ This repository currently has available two thermal comfort assessment methods:
  
 The PMV method is mostly based of [CBE Comfort Tool](https://github.com/CenterForTheBuiltEnvironment/comfort_tool). It uses R code to wrap around the `pmvElevatedAirSpeed` javascript function (which in turn depend on a few other javascript functions also available on this repository pmv folder to be self contained but authored by the CBE Comfort Tool group), making PMV/PPD calculation scriptable.
 
-`pmv/calculate_pmv_ppd.R` contains a simple script, and `frog_uhm_thermal_comfort.Rmd` a notebook explaining the steps. See [Rpubs](http://rpubs.com/carlosandrade/frogs_pmv) for a readable version showing plots and code. 
+`pmv/calculate_pmv_ppd.R` contains a simple script, and `pmv_ppd.Rmd` a notebook explaining the steps. See [Rpubs](http://rpubs.com/carlosandrade/pmv_ppd) for a readable version showing plots and code. 
 
 ## Adaptive Method
 
