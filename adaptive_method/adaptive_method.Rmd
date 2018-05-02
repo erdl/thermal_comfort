@@ -172,7 +172,7 @@ kable(head(dt))
 
 # Plot
 
-```{r}
+```{r fig.width= 9, fig.height=5}
 n_acceptable <- nrow(dt[is_acceptable_80 == "Acceptable"])
 n_unacceptable <- nrow(dt[is_acceptable_80 != "Acceptable"])
 
@@ -187,13 +187,11 @@ p <- ggplot(data = dt) +
   geom_point(aes(rolling_mean_outdoor_temperature,indoor_temperature,color=is_acceptable_80)) + 
   geom_line(aes(rolling_mean_outdoor_temperature,upper_bound_200_fpm),color="black") + 
   geom_line(aes(rolling_mean_outdoor_temperature,upper_bound_120_fpm),color="black") + 
-  geom_line(aes(rolling_mean_outdoor_temperature,upper_bound_0_fpm),color="black") + 
   geom_line(aes(rolling_mean_outdoor_temperature,upper_bound),color="black") + 
   geom_line(aes(rolling_mean_outdoor_temperature,lower_bound),color="black") + 
   
   geom_text(aes(max(dt$rolling_mean_outdoor_temperature)+0.2,max(dt$upper_bound_200_fpm), label = "fpm 200", vjust = -1), size = 3) + 
   geom_text(aes(max(dt$rolling_mean_outdoor_temperature)+0.2,max(dt$upper_bound_120_fpm), label = "fpm 120", vjust = -1), size = 3) + 
-  geom_text(aes(max(dt$rolling_mean_outdoor_temperature)+0.2,max(dt$upper_bound_0_fpm), label = "fpm 0", vjust = -1), size = 3) + 
   geom_text(aes(max(dt$rolling_mean_outdoor_temperature)+0.2,max(dt$upper_bound)-0.6, label = "no adj", vjust = -1), size = 3) + 
   geom_text(aes(max(dt$rolling_mean_outdoor_temperature)+0.2,max(dt$lower_bound), label = "no adj", vjust = -1), size = 3) + 
   
