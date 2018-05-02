@@ -141,15 +141,21 @@ kable(head(pmv_elevated_air))
 
 ```{r}
 pmv_elevated_air$is_acceptable <- NA_character_
-pmv_elevated_air[ppd > 5]$is_acceptable <- "Unacceptable Hot"
+pmv_elevated_air[ppd > 5]$is_acceptable <- ">5"
+
+
 pmv_elevated_air[ppd < -5]$is_acceptable <- "Unacceptable Cold"
 pmv_elevated_air[ppd >= -5 & ppd <= 5]$is_acceptable <- "Acceptable"
 ```
 
 
 ```{r}
-ggplot(data = pmv_elevated_air) + 
-  geom_point(aes(rh,ta,color=is_acceptable)) + 
-  theme_minimal() 
+ggplot() +
+  aes(pmv_elevated_air$pmv) +
+  geom_histogram(binwidth = 0.5, fill="black", col="grey") +
+  scale_x_continuous(breaks = seq(-5,5,0.5), lim = c(-5,5)) + theme_minimal() + 
+  xlab("PMV") + 
+  ylab("Number of Hours")
 ```
+
 
