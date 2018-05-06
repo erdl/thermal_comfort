@@ -20,6 +20,7 @@ s(library(lubridate))
 s(library(knitr))
 s(library(dygraphs))
 s(library(ggplot2))
+s(library(gridExtra))
 ```
 
 
@@ -27,13 +28,66 @@ s(library(ggplot2))
 
 This R Notebook utilizes the javascript functions from the [CBE Comfort Tool](http://comfort.cbe.berkeley.edu/), freely available on the website's [Github](https://github.com/CenterForTheBuiltEnvironment/comfort_tool/tree/master/static/js) in order to estimate the thermal comfort of the students of FROG UHM.
 
+# How to Use
+
+Because the input format is still undecided, the current notebook is structured as follows:
+
+   1. In the section below, Readings, one code block for each house was created to format the data into a common format. To add a new house, create another code block, and eval = FALSE the previous ones. See the existing code blocks for examples. Simulated data is also a code block, and replaces one of the monitored houses.
+   2. In Section **Used Variables** choose the fpm value. The number will be used for the model, in the saved file name, and in the title. 
+   
+That's all!
+
 # Readings
 
-The readings are a sample data from the frog-uhm project provided by Eileen Peppard to test the tool.
+The readings are from house 3, living room. The following code block prepares the input table averaging hourly:
 
-```{r}
-readings <- fread("~/Downloads/template_IP_dhhl_house8_aug_sept.csv")
+```{r House 3 Monitored, eval=FALSE}
+data_type = "Monitored House 3 Living Room"
+
+# load monitored data for humidity and temperature
+
+humidity <- fread("/Users/carlos/Github/erdl/thermal_comfort/pmv/data/house3/house3_livingroom_humidity.csv")
+temperature <- fread("/Users/carlos/Github/erdl/thermal_comfort/pmv/data/house3/house3_livingroom_temperature.csv")
+
+humidity$reading_timestamp <- ymd_hms(humidity$reading_timestamp,tz="HST")
+humidity <- humidity[,.(reading_timestamp,rh=value)]
+
+temperature$reading_timestamp <- ymd_hms(temperature$reading_timestamp,tz="HST")
+temperature <- temperature[,.(reading_timestamp,ta=value)]
+readings <- merge(temperature,humidity,by="reading_timestamp")[,.(ta,rh,timestamp=reading_timestamp)]
+
+#Reset the minute and second to 0, so we can group by ymd_h. 
+minute(readings$timestamp) <- 0
+second(readings$timestamp) <- 0
+readings <- readings[,.(ta=mean(ta),rh=mean(rh)),by="timestamp"]
 ```
+
+```{r House 8 Monitored, eval = TRUE}
+data_type = "Monitored House 8 Living Room"
+
+readings <- fread("~/Github/erdl/thermal_comfort/pmv/data/monitored/house8/house8_livingroom_pmv.csv")
+colnames(readings) <- c("timestamp","building_id","power","ta","rh")
+readings <- readings[,.(timestamp,ta,rh)]
+readings$timestamp <- dmy_hms(readings$timestamp)
+readings$ta <- as.numeric(readings$ta)
+readings$rh <- as.numeric(readings$rh)
+
+#Reset the minute and second to 0, so we can group by ymd_h. 
+minute(readings$timestamp) <- 0
+second(readings$timestamp) <- 0
+readings <- readings[,.(ta=mean(ta),rh=mean(rh)),by="timestamp"]
+```
+
+```{r Simulated House 8 run 0, warning = FALSE,eval=FALSE}
+data_type = "Simulated House 8 Run 0"
+readings <- fread("~/Github/erdl/thermal_comfort/pmv/data/simulated/house-8-run-0.csv")
+colnames(readings) <- sapply(str_split(colnames(readings)," - "),"[[",2)
+readings <- readings[2:.N,.(ta=as.numeric(`Living Space|Indoor Temperature`), #First row is units
+            rh=as.numeric(`Living Space|Indoor Relative Humidity`))]
+timestamp <- ymd_hms("1800-01-01 00:00:00") + hours(1:nrow(readings))
+
+```
+
 
 ## Used Variables
 
@@ -46,13 +100,24 @@ Of the provided data, the following variables were used:
  
 In addition, the following artificially created variables were used:
 
- * Metabolic Rate = 1.1
- * Clothing Level = 0.5
+ * Metabolic Rate = 1.0
+ * Clothing Level = 0.45
  * External Work = 0 (According to the CBE Comfort Tool Documentation)
 
 ```{r}
-colnames(readings) <- c("ta","tr","vel","rh","met","clo") 
+# params
+fpm <- 0
+save_file_path_name <- paste0("~/Desktop/house_test_run_0_fpm_",fpm,".png")
+
+
+# Add artificial values
+readings$tr <- readings$ta
+readings$vel <- fpm
+readings$met <- 1.0
+readings$clo <- 0.45
 readings$wme <- 0
+readings <- readings[,.(ta,tr,vel,rh,met,clo,wme,timestamp)]
+
 ```
 
 # Conversions
@@ -140,22 +205,73 @@ kable(head(pmv_elevated_air))
 # Plot
 
 ```{r}
-pmv_elevated_air$is_acceptable <- NA_character_
-pmv_elevated_air[ppd > 5]$is_acceptable <- ">5"
+pmv_elevated_air$thermal_sensation <- NA_character_
+pmv_elevated_air[pmv > 0.5]$thermal_sensation <- "Unacceptable Hot"
+pmv_elevated_air[pmv >= -0.5 & pmv <= 0.5]$thermal_sensation <- "Acceptable"
+pmv_elevated_air[pmv < -0.5]$thermal_sensation <- "Unacceptable Cold"
+
+n_acceptable <- nrow(pmv_elevated_air[thermal_sensation == "Acceptable"])
+n_unacceptable <- nrow(pmv_elevated_air[thermal_sensation != "Acceptable"])
+
+percent <- function(x, digits = 2, format = "f", ...) {
+  paste0(formatC(100 * x, format = format, digits = digits, ...), "%")
+}
+
+n_acceptable_percent <- percent(n_acceptable/(n_acceptable+n_unacceptable))
+n_unacceptable_percent <- percent(n_unacceptable/(n_acceptable+n_unacceptable))
+
+st <- min(pmv_elevated_air$timestamp)
+et <- max(pmv_elevated_air$timestamp)
+p_start_time <- paste0(year(st),"-",month(st),"-",day(st))
+p_end_time <- paste0(year(et),"-",month(et),"-",day(et))
 
 
-pmv_elevated_air[ppd < -5]$is_acceptable <- "Unacceptable Cold"
-pmv_elevated_air[ppd >= -5 & ppd <= 5]$is_acceptable <- "Acceptable"
+
+status <- paste0(p_start_time," to ",p_end_time," | Acceptable: ",n_acceptable," (",n_acceptable_percent,") ; Unacceptable: ",n_unacceptable," (",n_unacceptable_percent,")")
+```
+
+```{r}
+p <- ggplot(data = pmv_elevated_air) + 
+  geom_point(aes(ta,rh,color=thermal_sensation)) + 
+  theme_minimal() + 
+  xlab("Temperature (F)") + 
+  ylab("Relative Humidity (%)") + 
+  scale_colour_manual(values=c("Unacceptable Cold"="#0072B2","Acceptable"="#009E73","Unacceptable Hot"="#D55E00"))  + 
+  labs(color="Thermal Sensation")
 ```
 
 
 ```{r}
-ggplot() +
-  aes(pmv_elevated_air$pmv) +
-  geom_histogram(binwidth = 0.5, fill="black", col="grey") +
+q <- ggplot(data = pmv_elevated_air) +
+  aes(pmv,fill=thermal_sensation) +
+  geom_histogram(binwidth = 0.5, col="grey",boundary = 0) +
   scale_x_continuous(breaks = seq(-5,5,0.5), lim = c(-5,5)) + theme_minimal() + 
   xlab("PMV") + 
-  ylab("Number of Hours")
+  ylab("Number of Hours") + 
+  scale_fill_manual(values=c("Unacceptable Cold"="#0072B2","Acceptable"="#009E73","Unacceptable Hot"="#D55E00")) + 
+  labs(fill="Thermal Sensation")
 ```
 
+
+```{r fig.width= 9, fig.height=4}
+tg <- textGrob(paste0("PMV - ",data_type," Fpm ",fpm), gp=gpar(fontsize=15))
+sg <- textGrob(status, gp=gpar(fontsize=10))
+margin <- unit(0.5, "line")
+grid.arrange(tg, sg, arrangeGrob(p,q,ncol = 2),
+             heights = unit.c(grobHeight(tg) + 1.2*margin, 
+                              grobHeight(sg) + margin, 
+                              unit(1,"null")))
+```
+
+
+```{r}
+# 28.34 is pixel to cm, see: http://www.answers.com/Q/How_many_pixels_to_one_centimeter
+ggsave(filename=save_file_path_name,
+       plot=grid.arrange(tg, sg, arrangeGrob(p,q,ncol = 2),
+             heights = unit.c(grobHeight(tg) + 1.2*margin, 
+                              grobHeight(sg) + margin, 
+                              unit(1,"null"))),
+     width=1340/(28.34*3),
+     height=585/(28.34*3))
+```
 
