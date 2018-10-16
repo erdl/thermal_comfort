@@ -22,6 +22,7 @@ s(library(lubridate))
 s(library(knitr))
 s(library(ggplot2))
 s(library(stringr))
+s(library(formattable))
 ```
 
 # Introduction
@@ -39,17 +40,16 @@ n_hours_in_every_step <- 366 #Rolling mean will be based of the previous 14 days
 
 # How to use
 
-Because there is still inconsistency in the input format, some manual work is still needed. 
-
-For this notebook, 
-
-Select in the next 3 blocks which you would like to use to reshape the data: Either one of the monitored houses, or one for the simulated data. Make sure that the other block is eval = FALSE. The remaining blocks should run just as fine.
-
-Take note in each block indoor and outdoor temperatures may be loaded in separate files, so check all file paths to ensure they are as expected. 
-
-For monitored data, the outdoor and temperature tables are separate (although the outdoor table is reused for all houses). For simulated data, both outdoor and indoor are part of the same table. 
-
-Contrary to the PMV notebook, indoor air speed is not required to be changed (fpm 0, 120, 200), as they are plotted as lines.
+   * Use the code block "Monitored" or "Simulation" to load the associated data and put it in a common format for the rest of the notebook. (Remember to set the unused code block as eval = FALSE and the other with eval = TRUE).
+   * Change the title of the plot on the **data_type** variable
+   * Change the location of the file from c_view_house_<number> provided by Eileen on the **indoor** variable
+   * You do not need to change fpm here! They are shown as lines in this plot for 0, 120, and 200 fpm.
+   * Change the **save_file_path_name** variable with the location and file name.csv you want to save the generated plot. 
+   * For filtering some data, See the code block for `Time Window Filter` and decide if you want to apply or not for the current run.
+   
+If you need the table so it can be plotted in Tableau, you can use **dt** data frame variable and save it to a .csv. 
+   
+That's all! Once the pipeline and plots get more stable, I will code a script out of this.
 
 # Method
 
@@ -57,67 +57,21 @@ Contrary to the PMV notebook, indoor air speed is not required to be changed (fp
 
 Use the following code block if the Adaptive Method will be used in **monitored** data.
 
-```{r Monitored House 8, eval = TRUE}
-data_type <- "Monitored House 8 Living Room" #used in the plot title
-save_path_and_name <- "~/Desktop/house8-living-room-adaptive.png"
-
-# Outdoor
-
-## Perform Hourly Average
-
-# Load and rename columns for consistency -- no space and no upper case column names
-outdoor <- fread("~/Github/erdl/thermal_comfort/adaptive_method/data/houses_outdoor_temperature.csv")
-colnames(outdoor) <- c("timestamp","outdoor_temperature_f")
-
-# Identify the right types for each column
-outdoor$timestamp <- ymd_hms(outdoor$timestamp,tz="HST")
-outdoor$outdoor_temperature_f <- as.numeric(outdoor$outdoor_temperature_f)
-outdoor$ymd_h <- outdoor$timestamp
-
-#Ensure timestamps are ordered. Database does not guarantee that.
-outdoor <- outdoor[order(timestamp)]
-
-# Reset the minute and second to 0, so we can group by ymd_h. 
-minute(outdoor$ymd_h) <- 0
-second(outdoor$ymd_h) <- 0
-outdoor <- outdoor[,.(outdoor_temperature=mean(outdoor_temperature_f)),by="ymd_h"]
-
-
-# Indoor Temperature
-
-indoor <- fread("~/Github/erdl/thermal_comfort/adaptive_method/data/monitored/house8/house8_livingroom_adaptive.csv")
-colnames(indoor) <- c("timestamp","building_id","power","indoor_temperature","rh")
-indoor <- indoor[,.(timestamp,indoor_temperature)]
-
-# Correct types
-indoor$timestamp <- dmy_hms(indoor$timestamp)
-indoor$indoor_temperature <- as.numeric(indoor$indoor_temperature)
-indoor$ymd_h <- indoor$timestamp
-
-#Ensure timestamps are ordered. Database does not guarantee that.
-indoor <- indoor[order(timestamp)]
-
-# Reset the minute and second to 0, so we can group by ymd_h. 
-minute(indoor$ymd_h) <- 0
-second(indoor$ymd_h) <- 0
-indoor <- indoor[,.(indoor_temperature=mean(indoor_temperature)),by="ymd_h"]
-colnames(indoor) <- c("timestamp","indoor_temperature")
-```
-
-```{r Monitored House 2, eval = FALSE}
+```{r Monitored, eval = FALSE}
 data_type <- "Monitored House 2 Living Room" #used in the plot title
-save_path_and_name <- "~/Desktop/house2-living-room.png"
+save_path_and_name <- "~/Desktop/c-view-house-2-adaptive-living-room.svg"
 
 # Outdoor
 
 ## Perform Hourly Average
 
 # Load and rename columns for consistency -- no space and no upper case column names
-outdoor <- fread("~/Github/erdl/thermal_comfort/adaptive_method/data/houses_outdoor_temperature.csv")
+outdoor <- fread("~/Github/erdl/thermal_comfort/adaptive_method/data/houses_outdoor_temperature_new_time_window.csv")
 colnames(outdoor) <- c("timestamp","outdoor_temperature_f")
 
 # Identify the right types for each column
-outdoor$timestamp <- ymd_hms(outdoor$timestamp,tz="HST")
+outdoor$timestamp <- mdy_hms(outdoor$timestamp,tz="HST") #if exported via navicat the date format will be different than database
+#outdoor$timestamp <- ymd_hms(outdoor$timestamp,tz="HST")
 outdoor$outdoor_temperature_f <- as.numeric(outdoor$outdoor_temperature_f)
 outdoor$ymd_h <- outdoor$timestamp
 
@@ -129,18 +83,15 @@ minute(outdoor$ymd_h) <- 0
 second(outdoor$ymd_h) <- 0
 outdoor <- outdoor[,.(outdoor_temperature=mean(outdoor_temperature_f)),by="ymd_h"]
 
+
 # Indoor Temperature
 
-# To calculate the boundaries and acceptance, besides the outdoor rolling average, we also need the indoor temperature, and air speed. Because the tables are different, i.e. indoor's temperature and airspeed are hourly, wherewas the outdoor was originally at a minute sampling rate, there is a chance after the rolling average is calculated the number of rows will not match between both tables. This script matches the minimum number of rows between them both.
+indoor <- fread("~/Github/erdl/thermal_comfort/adaptive_method/data/monitored/house2/c_view_house_2_adaptive_living_room_new_time_window.csv")
 
-# load indoor data
-indoor <- fread("~/Github/erdl/thermal_comfort/adaptive_method/data/monitored/house2/house2_livingroom_temperature.csv")[,.(reading_timestamp,value)]
-colnames(indoor) <- c("timestamp","indoor_temperature")
-indoor$timestamp <- ymd_hms(indoor$timestamp,tz="HST")
-
-# Identify the right types for each column
-indoor$timestamp <- ymd_hms(indoor$timestamp,tz="HST")
-indoor$indoor_temperature <- as.numeric(indoor$indoor_temperature)
+# Correct types, filter NAs
+indoor <- indoor[,.(timestamp=mdy_hms(datetime_hst_hrly),indoor_temperature=as.numeric(indoor_temperature))] #if exported via navicat the date format will be different than database
+#indoor <- indoor[,.(timestamp=ymd_hms(datetime_hst_hrly),indoor_temperature=as.numeric(indoor_temperature))]
+indoor <- indoor[complete.cases(indoor)]
 indoor$ymd_h <- indoor$timestamp
 
 #Ensure timestamps are ordered. Database does not guarantee that.
@@ -151,19 +102,18 @@ minute(indoor$ymd_h) <- 0
 second(indoor$ymd_h) <- 0
 indoor <- indoor[,.(indoor_temperature=mean(indoor_temperature)),by="ymd_h"]
 colnames(indoor) <- c("timestamp","indoor_temperature")
-
 ```
 
 ## Simulated Data
 
 Use the following code block if the Adaptive Method will be used in **simulated** data.
 
-```{r Simulated, eval = FALSE, warning = FALSE}
-data_type <- "Simulated House 2 Run 1" #used in the plot title
-save_path_and_name <- "~/Desktop/house2-run-1.png"
+```{r Simulated, warning = FALSE, eval = TRUE}
+data_type <- "Simulated House 2 Run 3 Time Window" #used in the plot title
+save_path_and_name <- "~/Desktop/house2-run-3-time-window.png"
 # For simulated data, only 1 table, generated by BEopt, is necessary, as it contains both outdoor and indoor simulated data.
 
-dt <- fread("~/Github/erdl/thermal_comfort/adaptive_method/data/simulated/house-2-run-1.csv")
+dt <- fread("~/Github/erdl/thermal_comfort/adaptive_method/data/simulated/house-2-run-3.csv")
 colnames(dt) <- sapply(str_split(colnames(dt)," - "),"[[",2)
 dt <- dt[2:.N,.(outdoor_temperature=as.numeric(`Weather|Outdoor Drybulb`), #First row is units
             indoor_temperature=as.numeric(`Living Space|Indoor Temperature`))]
@@ -228,10 +178,9 @@ calculate_air_speed_adjustment <- function(in_air_speed){
   return(0.0153*in_air_speed+0.4333)
 }
 
-dt$upper_bound <- 0.31*dt$rolling_mean_outdoor_temperature + 60.5
-dt$upper_bound_0_fpm <- dt$upper_bound + calculate_air_speed_adjustment(0)
-dt$upper_bound_120_fpm <- dt$upper_bound + calculate_air_speed_adjustment(120)
-dt$upper_bound_200_fpm <- dt$upper_bound + calculate_air_speed_adjustment(200)
+dt$upper_bound_0_fpm <- 0.31*dt$rolling_mean_outdoor_temperature + 60.5
+dt$upper_bound_120_fpm <- dt$upper_bound_0_fpm + calculate_air_speed_adjustment(120)
+dt$upper_bound_200_fpm <- dt$upper_bound_0_fpm + calculate_air_speed_adjustment(200)
 
 
 dt$lower_bound <- 0.31*dt$rolling_mean_outdoor_temperature + 47.9 
@@ -243,9 +192,12 @@ With the comfort upper and lower bound, we then compare the indoor temperature a
 
 ```{r}
 dt$acceptable_temperature_80 <- NA_character_
-dt[indoor_temperature > upper_bound]$acceptable_temperature_80 <- "Unacceptable Hot"
+dt[indoor_temperature > upper_bound_200_fpm]$acceptable_temperature_80 <- "Unacceptable Hot"
+dt[indoor_temperature > upper_bound_120_fpm & indoor_temperature <= upper_bound_200_fpm]$acceptable_temperature_80 <- "Acceptable at 200 fpm"
+dt[indoor_temperature > upper_bound_0_fpm & indoor_temperature <= upper_bound_120_fpm]$acceptable_temperature_80 <- "Acceptable at 120 fpm"
+dt[indoor_temperature > lower_bound & indoor_temperature < upper_bound_0_fpm]$acceptable_temperature_80 <- "Acceptable at 0 fpm"
 dt[indoor_temperature < lower_bound]$acceptable_temperature_80 <- "Unacceptable Cold"
-dt[indoor_temperature > lower_bound & indoor_temperature < upper_bound]$acceptable_temperature_80 <- "Acceptable"
+
 ```
 
 ## Calculate Degrees Off
@@ -253,28 +205,35 @@ dt[indoor_temperature > lower_bound & indoor_temperature < upper_bound]$acceptab
 In addition, how far higher or lower than the upper and lower bound respectively can also be calculated.
 
 ```{r}
-dt$degrees_off <- NA_real_
+dt$degrees_off_0_fpm <- NA_real_
 
-dt[indoor_temperature > upper_bound]$degrees_off <- dt[indoor_temperature > upper_bound]$indoor_temperature - dt[indoor_temperature > upper_bound]$upper_bound
+dt[indoor_temperature > upper_bound_0_fpm]$degrees_off_0_fpm <- dt[indoor_temperature > upper_bound_0_fpm]$indoor_temperature - dt[indoor_temperature > upper_bound_0_fpm]$upper_bound_0_fpm
 
-dt[indoor_temperature < lower_bound]$degrees_off <- dt[indoor_temperature < lower_bound]$indoor_temperature - dt[indoor_temperature < lower_bound]$lower_bound
+dt[indoor_temperature < lower_bound]$degrees_off_0_fpm <- dt[indoor_temperature < lower_bound]$indoor_temperature - dt[indoor_temperature < lower_bound]$lower_bound
 
-dt[indoor_temperature > lower_bound & indoor_temperature < upper_bound]$degrees_off <- 0
+dt[indoor_temperature > lower_bound & indoor_temperature < upper_bound_0_fpm]$degrees_off_0_fpm <- 0
 ```
 
-# Output Table
+# Output Table And Optional Time Slice
 
 Finally, we the output table containing all the calculated information.
 
-```{r}
+```{r Time Window Filter for Simulated Data}
 kable(head(dt))
+
+
+#dt <- dt[timestamp > ymd("1800-10-06") | timestamp < ymd("1800-06-22")] # New time window
+p_start_time <- "1800-10-06"
+p_end_time <- "1800-06-22"
+dt <- dt[timestamp > ymd("1800-10-06") | timestamp < ymd("1800-02-09")] #Old Time Window
+#p_end_time <- "1800-02-09"
 ```
 
 # Plot
 
 ```{r fig.width= 9, fig.height=4}
-n_acceptable <- nrow(dt[acceptable_temperature_80 == "Acceptable"])
-n_unacceptable <- nrow(dt[acceptable_temperature_80 != "Acceptable"])
+n_acceptable <- nrow(dt[acceptable_temperature_80 == "Acceptable at 0 fpm"])
+n_unacceptable <- nrow(dt[acceptable_temperature_80 != "Acceptable at 0 fpm"])
 
 percent <- function(x, digits = 2, format = "f", ...) {
   paste0(formatC(100 * x, format = format, digits = digits, ...), "%")
@@ -285,10 +244,11 @@ n_unacceptable_percent <- percent(n_unacceptable/(n_acceptable+n_unacceptable))
 
 st <- min(dt$timestamp)
 et <- max(dt$timestamp)
-p_start_time <- paste0(year(st),"-",month(st),"-",day(st))
-p_end_time <- paste0(year(et),"-",month(et),"-",day(et))
+#p_start_time <- paste0(year(st),"-",month(st),"-",day(st))
+#p_end_time <- paste0(year(et),"-",month(et),"-",day(et))
 
-status <- paste0(p_start_time," to ",p_end_time," | Acceptable: ",n_acceptable," (",n_acceptable_percent,") ; Unacceptable: ",n_unacceptable," (",n_unacceptable_percent,")")
+
+status <- paste0(p_start_time," to ",p_end_time," | Acceptable 0 fpm: ",n_acceptable," (",n_acceptable_percent,") ; Unacceptable 0 fpm: ",n_unacceptable," (",n_unacceptable_percent,")")
 
 
 
@@ -296,17 +256,17 @@ p <- ggplot(data = dt) +
   geom_point(aes(rolling_mean_outdoor_temperature,indoor_temperature,color=acceptable_temperature_80)) + 
   geom_line(aes(rolling_mean_outdoor_temperature,upper_bound_200_fpm),color="black") + 
   geom_line(aes(rolling_mean_outdoor_temperature,upper_bound_120_fpm),color="black") + 
-  geom_line(aes(rolling_mean_outdoor_temperature,upper_bound),color="black") + 
+  geom_line(aes(rolling_mean_outdoor_temperature,upper_bound_0_fpm),color="black") + 
   geom_line(aes(rolling_mean_outdoor_temperature,lower_bound),color="black") + 
   
   geom_text(aes(max(dt$rolling_mean_outdoor_temperature)+0.2,max(dt$upper_bound_200_fpm), label = "fpm 200", vjust = -1), size = 3) + 
   geom_text(aes(max(dt$rolling_mean_outdoor_temperature)+0.2,max(dt$upper_bound_120_fpm), label = "fpm 120", vjust = -1), size = 3) + 
-  geom_text(aes(max(dt$rolling_mean_outdoor_temperature)+0.2,max(dt$upper_bound)-0.6, label = "no adj", vjust = -1), size = 3) + 
-  geom_text(aes(max(dt$rolling_mean_outdoor_temperature)+0.2,max(dt$lower_bound), label = "no adj", vjust = -1), size = 3) + 
-  
+  geom_text(aes(max(dt$rolling_mean_outdoor_temperature)+0.2,max(dt$upper_bound_0_fpm)-0.6, label = "fpm 0", vjust = -1), size = 3) + 
+  geom_text(aes(max(dt$rolling_mean_outdoor_temperature)+0.2,max(dt$lower_bound), label = "fpm 0", vjust = -1), size = 3) + 
+
   
   theme_minimal() + 
-  scale_colour_manual(values=c("Unacceptable Cold"="#0072B2","Acceptable"="#009E73","Unacceptable Hot"="#D55E00")) +
+  scale_colour_manual(values=c("Unacceptable Cold"="#0072B2","Acceptable at 0 fpm"="#2e6d1e","Acceptable at 120 fpm"="#55bc3c","Acceptable at 200 fpm"="#3bfc0c","Unacceptable Hot"="#D55E00")) +
   ggtitle(paste0("Adaptive Method - ",data_type), subtitle = status) + 
   ylab("Indoor Temperature (F)") + 
   xlab("Rolling Mean Outdoor Temperature (F)") + 
@@ -314,6 +274,45 @@ p <- ggplot(data = dt) +
 
 p
 ```
+
+
+```{r}
+counts <- rbind(
+  data.table(Type="Unacceptable Hot",Count=nrow(dt[acceptable_temperature_80 == "Unacceptable Hot"]),Percent = nrow(dt[acceptable_temperature_80 == "Unacceptable Hot"])/nrow(dt)),
+  data.table(Type="Acceptable at 200 fpm",Count=nrow(dt[acceptable_temperature_80 == "Acceptable at 200 fpm"]),Percent = nrow(dt[acceptable_temperature_80 == "Acceptable at 200 fpm"])/nrow(dt)),
+  data.table(Type="Acceptable at 120 fpm",Count=nrow(dt[acceptable_temperature_80 == "Acceptable at 120 fpm"]),Percent = nrow(dt[acceptable_temperature_80 == "Acceptable at 120 fpm"])/nrow(dt)),
+  data.table(Type="Acceptable at 0 fpm",Count=nrow(dt[acceptable_temperature_80 == "Acceptable at 0 fpm"]),Percent = nrow(dt[acceptable_temperature_80 == "Acceptable at 0 fpm"])/nrow(dt)),
+  data.table(Type="Unacceptable Cold",Count=nrow(dt[acceptable_temperature_80 == "Unacceptable Cold"]),Percent = nrow(dt[acceptable_temperature_80 == "Unacceptable Cold"])/nrow(dt))
+)
+counts$Label <- "-"
+
+counts <- counts[,.(Label,Type,Count,Percent)]
+
+counts$cumsum <- counts$Count
+counts$cumsum[3] <- counts$cumsum[4] + counts$cumsum[3] 
+counts$cumsum[2] <- counts$cumsum[2] + counts$cumsum[3] 
+
+
+counts$cumpercent <- counts$Percent
+counts$cumpercent[3] <- counts$cumpercent[4] + counts$cumpercent[3] 
+counts$cumpercent[2] <- counts$cumpercent[2] + counts$cumpercent[3] 
+
+counts$Percent <- percent(counts$Percent)
+counts$cumpercent <- percent(counts$cumpercent)
+
+counts$Type2 <- c("Unacceptable Hot","Additional acceptable at 200 fpm","Additional acceptable at 120 fpm","Additional acceptable at 0 fpm","Unacceptable Cold")
+
+counts <- counts[,.(Label,Type,cumsum,cumpercent,Type2,Count,Percent)]
+
+formattable(counts,list(
+            area(row=1,col = Label) ~ color_tile("#D55E00", "#D55E00"),
+            area(row=2,col = Label) ~ color_tile("#a5ff00", "#a5ff00"),
+            area(row=3,col = Label) ~ color_tile("#62d147", "#62d147"),
+            area(row=4,col = Label) ~ color_tile("#2e6d1e", "#2e6d1e"),
+            area(row=5,col = Label) ~ color_tile("#0072B2", "#0072B2")
+            ))
+```
+
 
 ```{r}
 # 28.34 is pixel to cm, see: http://www.answers.com/Q/How_many_pixels_to_one_centimeter
