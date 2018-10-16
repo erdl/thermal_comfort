@@ -1,7 +1,7 @@
 ---
-title: "PMV PPD"
+title: "Building + Room All in One PMV PPD"
 author: "Carlos V. Paradis"
-date: "March 22, 2018"
+date: "October 15, 2018"
 output: 
   html_document:
     number_sections: true
@@ -50,9 +50,11 @@ The readings are from house 3, living room. The following code block prepares th
 data_type = "Monitored House 2 Living Room"
 
 #readings <- fread("~/Github/erdl/thermal_comfort/pmv/data/monitored/house8/house8_livingroom_pmv.csv")
-readings <- fread("~/Github/erdl/thermal_comfort/adaptive_method/data/monitored/house2/c_view_house_2_adaptive_living_room.csv")
-colnames(readings) <- c("timestamp","building_id","ta","rh")
-readings <- readings[,.(timestamp,ta,rh)]
+#readings <- fread("~/Github/erdl/thermal_comfort/adaptive_method/data/monitored/house2/c_view_house_2_adaptive_living_room.csv")
+readings <- fread("~/Downloads/all_rooms_temp_humdity_hrly.csv")
+readings <- readings[complete.cases(readings)]
+#colnames(readings) <- c("timestamp","building_id","ta","rh")
+colnames(readings) <- c("building_id","room","timestamp","ta","rh")
 readings$timestamp <- ymd_hms(readings$timestamp)
 readings$ta <- as.numeric(readings$ta)
 readings$rh <- as.numeric(readings$rh)
@@ -60,7 +62,8 @@ readings$rh <- as.numeric(readings$rh)
 #Reset the minute and second to 0, so we can group by ymd_h. 
 minute(readings$timestamp) <- 0
 second(readings$timestamp) <- 0
-readings <- readings[,.(ta=mean(ta),rh=mean(rh)),by="timestamp"]
+readings_complete <- readings[,.(ta=mean(ta),rh=mean(rh)),by=c("timestamp","building_id","room")]
+readings <- readings_complete[,.(timestamp,ta,rh)]
 ```
 
 ```{r Simulated, warning = FALSE,eval=FALSE}
@@ -91,7 +94,7 @@ In addition, the following artificially created variables were used:
 
 ```{r}
 # params
-fpm <- 120
+fpm <- 0
 save_file_path_name <- paste0("~/Desktop/house_test_run_0_fpm_",fpm,".png")
 
 
@@ -184,6 +187,11 @@ First few rows of the table for Frogs 1.
 # Convert ta to tr 
 pmv_elevated_air$ta_adj <- pmv_elevated_air$ta_adj*1.8 + 32
 pmv_elevated_air$tr_adj <- pmv_elevated_air$tr_adj*1.8 + 32
+
+# Add Building ID and Room from the original table 
+
+pmv_elevated_air <- cbind(pmv_elevated_air,readings_complete[,.(building_id,room)])
+
 kable(head(pmv_elevated_air))
 ```
 
