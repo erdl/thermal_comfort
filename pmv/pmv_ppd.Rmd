@@ -21,6 +21,7 @@ s(library(knitr))
 s(library(dygraphs))
 s(library(ggplot2))
 s(library(gridExtra))
+s(library(grid))
 ```
 
 
@@ -30,45 +31,29 @@ This R Notebook utilizes the javascript functions from the [CBE Comfort Tool](ht
 
 # How to Use
 
-Because the input format is still undecided, the current notebook is structured as follows:
+   * Use the code block "Monitored" or "Simulation" to load the associated data and put it in a common format for the rest of the notebook. (Remember to set the unused code block as eval = FALSE and the other with eval = TRUE).
+   * Change the title of the plot on the **data_type** variable
+   * Change the location of the file from c_view_house_<number> provided by Eileen on the **readings** variable
+   * Change the **fpm** variable for the air speed velocity (e.g. 0, 120, 200).
+   * Change the **save_file_path_name** variable with the location and file name.csv you want to save the generated plot.
+   * Current code does not apply any filter to what months to keep. Just the adaptive method code.
 
-   1. In the section below, Readings, one code block for each house was created to format the data into a common format. To add a new house, create another code block, and eval = FALSE the previous ones. See the existing code blocks for examples. Simulated data is also a code block, and replaces one of the monitored houses.
-   2. In Section **Used Variables** choose the fpm value. The number will be used for the model, in the saved file name, and in the title. 
-   
-That's all!
+If you need the table so it can be plotted in Tableau, you can use **pmv_elevated_air** data frame variable and save it to a .csv. 
+
+That's all! Once the pipeline and plots get more stable, I will code a script out of this.
 
 # Readings
 
 The readings are from house 3, living room. The following code block prepares the input table averaging hourly:
 
-```{r House 3 Monitored, eval=FALSE}
-data_type = "Monitored House 3 Living Room"
+```{r Monitored, eval = TRUE}
+data_type = "Monitored House 2 Living Room"
 
-# load monitored data for humidity and temperature
-
-humidity <- fread("/Users/carlos/Github/erdl/thermal_comfort/pmv/data/house3/house3_livingroom_humidity.csv")
-temperature <- fread("/Users/carlos/Github/erdl/thermal_comfort/pmv/data/house3/house3_livingroom_temperature.csv")
-
-humidity$reading_timestamp <- ymd_hms(humidity$reading_timestamp,tz="HST")
-humidity <- humidity[,.(reading_timestamp,rh=value)]
-
-temperature$reading_timestamp <- ymd_hms(temperature$reading_timestamp,tz="HST")
-temperature <- temperature[,.(reading_timestamp,ta=value)]
-readings <- merge(temperature,humidity,by="reading_timestamp")[,.(ta,rh,timestamp=reading_timestamp)]
-
-#Reset the minute and second to 0, so we can group by ymd_h. 
-minute(readings$timestamp) <- 0
-second(readings$timestamp) <- 0
-readings <- readings[,.(ta=mean(ta),rh=mean(rh)),by="timestamp"]
-```
-
-```{r House 8 Monitored, eval = TRUE}
-data_type = "Monitored House 8 Living Room"
-
-readings <- fread("~/Github/erdl/thermal_comfort/pmv/data/monitored/house8/house8_livingroom_pmv.csv")
-colnames(readings) <- c("timestamp","building_id","power","ta","rh")
+#readings <- fread("~/Github/erdl/thermal_comfort/pmv/data/monitored/house8/house8_livingroom_pmv.csv")
+readings <- fread("~/Github/erdl/thermal_comfort/adaptive_method/data/monitored/house2/c_view_house_2_adaptive_living_room.csv")
+colnames(readings) <- c("timestamp","building_id","ta","rh")
 readings <- readings[,.(timestamp,ta,rh)]
-readings$timestamp <- dmy_hms(readings$timestamp)
+readings$timestamp <- ymd_hms(readings$timestamp)
 readings$ta <- as.numeric(readings$ta)
 readings$rh <- as.numeric(readings$rh)
 
@@ -78,7 +63,7 @@ second(readings$timestamp) <- 0
 readings <- readings[,.(ta=mean(ta),rh=mean(rh)),by="timestamp"]
 ```
 
-```{r Simulated House 8 run 0, warning = FALSE,eval=FALSE}
+```{r Simulated, warning = FALSE,eval=FALSE}
 data_type = "Simulated House 8 Run 0"
 readings <- fread("~/Github/erdl/thermal_comfort/pmv/data/simulated/house-8-run-0.csv")
 colnames(readings) <- sapply(str_split(colnames(readings)," - "),"[[",2)
@@ -106,7 +91,7 @@ In addition, the following artificially created variables were used:
 
 ```{r}
 # params
-fpm <- 0
+fpm <- 120
 save_file_path_name <- paste0("~/Desktop/house_test_run_0_fpm_",fpm,".png")
 
 
